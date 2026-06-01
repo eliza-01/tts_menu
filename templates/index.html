@@ -1,0 +1,100 @@
+<!doctype html>
+<!-- templates/index.html -->
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TTS Cards</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>TTS Cards</h1>
+      <p>Группы, карточки, изображения и автоматический MP3 при сохранении текста.</p>
+    </div>
+    <button id="stopPlaybackBtn" class="danger ghost">Остановить воспроизведение</button>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>Новая группа</h2>
+        <form id="groupForm" class="stack">
+          <input id="groupName" type="text" placeholder="Название группы" required>
+          <label>
+            Повторы всей группы
+            <input id="groupRepeats" type="number" min="1" max="100" value="1">
+          </label>
+          <button type="submit">Создать группу</button>
+        </form>
+      </section>
+
+      <section class="panel grow">
+        <h2>Группы</h2>
+        <div id="groupsList" class="groups-list"></div>
+      </section>
+    </aside>
+
+    <section class="content">
+      <div id="emptyState" class="empty-state">
+        Создайте или выберите группу слева.
+      </div>
+
+      <div id="groupWorkspace" class="hidden">
+        <section class="panel group-header">
+          <div class="group-title-row">
+            <input id="selectedGroupName" class="title-input" type="text">
+            <button id="saveGroupBtn">Сохранить группу</button>
+            <button id="deleteGroupBtn" class="danger">Удалить группу</button>
+          </div>
+
+          <div class="controls-grid">
+            <label>
+              Повторы всей группы
+              <input id="selectedGroupRepeats" type="number" min="1" max="100" value="1">
+            </label>
+            <label>
+              Повторы для всех карточек
+              <input id="bulkCardRepeats" type="number" min="1" max="100" value="1">
+            </label>
+            <button id="applyBulkRepeatsBtn">Применить ко всем карточкам</button>
+            <button id="playGroupBtn" class="primary">Воспроизвести всю группу</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Новая карточка</h2>
+          <form id="cardForm" class="card-form">
+            <label>
+              Текст карточки
+              <textarea id="cardText" rows="4" placeholder="Введите текст, из которого нужно создать MP3" required></textarea>
+            </label>
+            <label>
+              Повторы карточки
+              <input id="cardRepeats" type="number" min="1" max="100" value="1">
+            </label>
+            <label>
+              Изображение, необязательно
+              <input id="cardImage" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+            </label>
+            <button type="submit">Сохранить карточку и создать MP3</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="cards-title-row">
+            <h2>Карточки</h2>
+            <span id="cardsCounter" class="muted"></span>
+          </div>
+          <div id="cardsList" class="cards-list"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

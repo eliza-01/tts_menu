@@ -1,0 +1,185 @@
+l2arena
+├── db
+│   └── init
+│       └── 01-schema.sql
+├── server
+│   ├── scripts
+│   │   └── db-check.mjs
+│   ├── src
+│   │   ├── config
+│   │   │   ├── env.ts
+│   │   │   ├── inlineAssets.ts
+│   │   │   └── items.ts
+│   │   ├── db
+│   │   │   └── index.ts
+│   │   ├── middleware
+│   │   │   ├── auth.ts
+│   │   │   ├── authStub.ts
+│   │   │   ├── session.ts
+│   │   │   └── telemetry.ts
+│   │   ├── modules
+│   │   │   ├── actions
+│   │   │   │   └── actions.controller.ts
+│   │   │   ├── admin
+│   │   │   │   └── admin.controller.ts
+│   │   │   ├── auth
+│   │   │   │   ├── loginTokens.repo.ts
+│   │   │   │   ├── webAuth.controller.ts
+│   │   │   │   └── webLoginCode.service.ts
+│   │   │   ├── classes
+│   │   │   │   ├── classes.controller.ts
+│   │   │   │   └── classes.repo.ts
+│   │   │   ├── duels
+│   │   │   │   ├── duels.controller.ts
+│   │   │   │   ├── duels.repo.ts
+│   │   │   │   └── duels.types.ts
+│   │   │   ├── offers
+│   │   │   │   ├── offers.controller.ts
+│   │   │   │   ├── offers.repo.ts
+│   │   │   │   └── offers.types.ts
+│   │   │   └── users
+│   │   │       ├── user.controller.ts
+│   │   │       ├── user.repo.ts
+│   │   │       ├── user.service.ts
+│   │   │       └── user.types.ts
+│   │   ├── telegram
+│   │   │   └── bot.ts
+│   │   ├── index.ts
+│   │   └── routes.ts
+│   ├── utils
+│   │   └── bridge
+│   │       ├── main.py
+│   │       └── requirements.txt
+│   ├── .dockerignore
+│   ├── .env.old
+│   ├── Dockerfile
+│   ├── ngrok.yml
+│   ├── package-lock.json
+│   ├── package.json
+│   └── tsconfig.json
+├── tools
+│   ├── dump
+│   │   ├── main.py
+│   │   └── project_bundle.txt
+│   ├── list
+│   │   ├── files.txt
+│   │   ├── main.py
+│   │   └── tree.txt
+│   └── headers.py
+├── uploads
+│   └── user
+│       ├── 6cda4730-d0ff-11f0-b023-e2bf3fc730e9
+│       │   └── avatar.jpg
+│       ├── 68406dff-d83a-11f0-8eb2-5e784e13d0a5
+│       │   └── avatar.jpg
+│       ├── cc255725-cd27-11f0-86ad-f24f9386a352
+│       ├── cc255725-cd27-11f0-86ad-f24f9386a353
+│       ├── d05c7b3e-cfd8-11f0-86ad-f24f9386a353
+│       ├── e9b9c5f3-d6a1-11f0-a233-baa2de32e4c2
+│       │   └── avatar.jpg
+│       ├── f68fcd28-d47d-11f0-b023-e2bf3fc730e9
+│       │   └── avatar.jpg
+│       └── f924f910-d0ef-11f0-b023-e2bf3fc730e9
+│           └── avatar.jpg
+├── web
+│   ├── admin
+│   │   ├── admin.css
+│   │   ├── admin.js
+│   │   └── index.html
+│   ├── assets
+│   │   └── img
+│   │       ├── animation
+│   │       ├── cursors
+│   │       │   ├── default.cur
+│   │       │   ├── dialog.cur
+│   │       │   ├── pointer.cur
+│   │       │   ├── sword.cur
+│   │       │   ├── wand-decline.cur
+│   │       │   └── wand.cur
+│   │       ├── icons
+│   │       │   ├── actions
+│   │       │   ├── grades
+│   │       │   ├── items
+│   │       │   │   ├── armor
+│   │       │   │   │   ├── B
+│   │       │   │   │   │   ├── avadon_robe_set.jpg
+│   │       │   │   │   │   └── blue_wolf_heavy_set.jpg
+│   │       │   │   │   ├── C
+│   │       │   │   │   └── S
+│   │       │   │   │       └── imperial_shield.jpg
+│   │       │   │   ├── jewelry
+│   │       │   │   │   ├── B
+│   │       │   │   │   │   ├── adamantite_set.jpg
+│   │       │   │   │   │   ├── black_ore_set.jpg
+│   │       │   │   │   │   └── ring_of_ant_queen.jpg
+│   │       │   │   │   ├── C
+│   │       │   │   │   │   └── nassens_set.jpg
+│   │       │   │   │   └── S
+│   │       │   │   │       ├── sealed_tateossian_earring.jpg
+│   │       │   │   │       └── tateossian_set.jpg
+│   │       │   │   └── weapons
+│   │       │   │       ├── B
+│   │       │   │       │   ├── 5-10908.jpg
+│   │       │   │       │   ├── 5-10944.jpg
+│   │       │   │       │   ├── art_of_battle_axe.jpg
+│   │       │   │       │   ├── arthro_nail.jpg
+│   │       │   │       │   ├── bellion_cestus.jpg
+│   │       │   │       │   ├── bow_of_peril.jpg
+│   │       │   │       │   ├── damascus_sword.jpg
+│   │       │   │       │   ├── great_sword.jpg
+│   │       │   │       │   ├── kris.jpg
+│   │       │   │       │   ├── lance_long.jpg
+│   │       │   │       │   ├── star_buster.jpg
+│   │       │   │       │   ├── valhalla_sword.jpg
+│   │       │   │       │   └── wizards_tear.jpg
+│   │       │   │       └── S
+│   │       │   │           ├── arcana_mace.jpg
+│   │       │   │           └── heavens_divider.jpg
+│   │       │   ├── plan
+│   │       │   │   ├── achives.gif
+│   │       │   │   ├── analytics.gif
+│   │       │   │   ├── custom.gif
+│   │       │   │   └── usdt.gif
+│   │       │   ├── stats
+│   │       │   │   ├── flame.gif
+│   │       │   │   └── kills.psd
+│   │       │   ├── actions2.gif
+│   │       │   ├── actions.gif
+│   │       │   ├── answers.gif
+│   │       │   ├── plan.gif
+│   │       │   └── users.gif
+│   │       └── rotate.gif
+│   ├── css
+│   │   ├── auth.css
+│   │   ├── base.css
+│   │   ├── duel.css
+│   │   ├── items.css
+│   │   ├── profile.css
+│   │   ├── smoke.css
+│   │   └── stream.css
+│   ├── js
+│   │   ├── actions.js
+│   │   ├── answers.js
+│   │   ├── api.js
+│   │   ├── avatar.js
+│   │   ├── base.js
+│   │   ├── duels-kio.js
+│   │   ├── duels.js
+│   │   ├── icons-items.js
+│   │   ├── login-code.js
+│   │   ├── nav-init.js
+│   │   ├── plan.js
+│   │   ├── smoke.js
+│   │   ├── stream.js
+│   │   ├── users-profile.js
+│   │   └── wizard.js
+│   ├── .env.example
+│   ├── icons.json
+│   ├── index.html
+│   ├── inline-assets.json
+│   ├── items.json
+│   └── plan.json
+├── .gitignore
+├── docker-compose.yml
+├── l2arena(9.12.25).sql
+└── readme.md

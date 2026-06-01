@@ -1,0 +1,903 @@
+# Bundled from project root: C:/Projects/PythonProject
+
+# static/app.js
+// static/app.js
+const state = {
+  groups: [],
+  selectedGroup: null,
+  playbackToken: 0,
+  currentAudio: null,
+};
+
+const el = {
+  groupForm: document.querySelector('#groupForm'),
+  groupName: document.querySelector('#groupName'),
+  groupRepeats: document.querySelector('#groupRepeats'),
+  groupsList: document.querySelector('#groupsList'),
+  emptyState: document.querySelector('#emptyState'),
+  groupWorkspace: document.querySelector('#groupWorkspace'),
+  selectedGroupName: document.querySelector('#selectedGroupName'),
+  selectedGroupRepeats: document.querySelector('#selectedGroupRepeats'),
+  saveGroupBtn: document.querySelector('#saveGroupBtn'),
+  deleteGroupBtn: document.querySelector('#deleteGroupBtn'),
+  bulkCardRepeats: document.querySelector('#bulkCardRepeats'),
+  applyBulkRepeatsBtn: document.querySelector('#applyBulkRepeatsBtn'),
+  playGroupBtn: document.querySelector('#playGroupBtn'),
+  stopPlaybackBtn: document.querySelector('#stopPlaybackBtn'),
+  cardForm: document.querySelector('#cardForm'),
+  cardText: document.querySelector('#cardText'),
+  cardRepeats: document.querySelector('#cardRepeats'),
+  cardImage: document.querySelector('#cardImage'),
+  cardsList: document.querySelector('#cardsList'),
+  cardsCounter: document.querySelector('#cardsCounter'),
+  toast: document.querySelector('#toast'),
+};
+
+function showToast(message, isError = false) {
+  el.toast.textContent = message;
+  el.toast.style.background = isError ? '#dc2626' : '#111827';
+  el.toast.classList.remove('hidden');
+  window.clearTimeout(showToast.timer);
+  showToast.timer = window.setTimeout(() => el.toast.classList.add('hidden'), 3500);
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options);
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await response.json() : null;
+
+  if (!response.ok) {
+    const message = payload?.error || `Ошибка запроса: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+function positiveInt(value, fallback = 1) {
+  const number = Number.parseInt(value, 10);
+  if (Number.isNaN(number)) return fallback;
+  return Math.max(1, Math.min(number, 100));
+}
+
+async function loadGroups() {
+  state.groups = await requestJson('/api/groups');
+  renderGroups();
+
+  if (state.selectedGroup) {
+    const stillExists = state.groups.some(group => group.id === state.selectedGroup.id);
+    if (!stillExists) {
+      state.selectedGroup = null;
+      renderWorkspace();
+    }
+  }
+}
+
+async function selectGroup(groupId) {
+  state.selectedGroup = await requestJson(`/api/groups/${groupId}`);
+  renderGroups();
+  renderWorkspace();
+}
+
+function renderGroups() {
+  el.groupsList.innerHTML = '';
+
+  if (state.groups.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'Групп пока нет.';
+    el.groupsList.append(empty);
+    return;
+  }
+
+  for (const group of state.groups) {
+    const button = document.createElement('button');
+    button.className = `group-item ${state.selectedGroup?.id === group.id ? 'active' : ''}`;
+    button.innerHTML = `
+      <strong></strong>
+      <span></span>
+    `;
+    button.querySelector('strong').textContent = group.name;
+    button.querySelector('span').textContent = `Карточек: ${group.cards_count}; повторов группы: ${group.group_repeats}`;
+    button.addEventListener('click', () => selectGroup(group.id));
+    el.groupsList.append(button);
+  }
+}
+
+function renderWorkspace() {
+  const group = state.selectedGroup;
+
+  if (!group) {
+    el.emptyState.classList.remove('hidden');
+    el.groupWorkspace.classList.add('hidden');
+    return;
+  }
+
+  el.emptyState.classList.add('hidden');
+  el.groupWorkspace.classList.remove('hidden');
+  el.selectedGroupName.value = group.name;
+  el.selectedGroupRepeats.value = group.group_repeats;
+  el.cardsCounter.textContent = `Всего: ${group.cards.length}`;
+
+  renderCards(group.cards);
+}
+
+function cardCacheBuster(card) {
+  return card.updated_at ? `?v=${encodeURIComponent(card.updated_at)}` : '';
+}
+
+function renderCards(cards) {
+  el.cardsList.innerHTML = '';
+
+  if (cards.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'В этой группе пока нет карточек.';
+    el.cardsList.append(empty);
+    return;
+  }
+
+  for (const card of cards) {
+    const node = document.createElement('article');
+    node.className = 'card';
+    node.dataset.cardId = card.id;
+
+    const imageHtml = card.image_path
+      ? `<img src="${card.image_path}" alt="Изображение карточки">`
+      : '<span class="muted">Нет изображения</span>';
+
+    node.innerHTML = `
+      <div class="card-image-wrap">${imageHtml}</div>
+      <div class="card-body">
+        <p class="card-text-preview"></p>
+
+        <label class="card-edit-field hidden">
+          Текст
+          <textarea class="card-text" rows="4"></textarea>
+        </label>
+
+        <div class="card-controls">
+          <span class="card-repeats-preview muted"></span>
+          <label class="card-repeats-field hidden">
+            Повторы
+            <input class="card-repeats" type="number" min="1" max="100">
+          </label>
+          <audio controls preload="none"></audio>
+          <button class="play-card-btn primary" type="button">Играть</button>
+          <button class="edit-card-btn" type="button">Редактировать</button>
+          <button class="save-card-btn hidden" type="button">Сохранить</button>
+          <button class="cancel-card-btn ghost hidden" type="button">Отмена</button>
+          <button class="delete-card-btn danger" type="button">Удалить</button>
+        </div>
+
+        <div class="card-image-row hidden">
+          <label>
+            Заменить изображение
+            <input class="replace-image" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+          </label>
+          <button class="remove-image-btn" type="button">Убрать изображение</button>
+        </div>
+      </div>
+    `;
+
+    node.querySelector('.card-text-preview').textContent = card.text;
+    node.querySelector('.card-repeats-preview').textContent = `Повторы: ${card.card_repeats}`;
+    node.querySelector('.card-text').value = card.text;
+    node.querySelector('.card-repeats').value = card.card_repeats;
+
+    const audio = node.querySelector('audio');
+    audio.src = `${card.audio_path}${cardCacheBuster(card)}`;
+
+    const replaceImageInput = node.querySelector('.replace-image');
+    const removeImageButton = node.querySelector('.remove-image-btn');
+    removeImageButton.disabled = !card.image_path;
+    if (!card.image_path) {
+      removeImageButton.textContent = 'Изображения нет';
+    }
+
+    node.querySelector('.play-card-btn').addEventListener('click', () => {
+      const repeats = positiveInt(node.querySelector('.card-repeats').value, card.card_repeats);
+      playCard(card, repeats);
+    });
+
+    node.querySelector('.edit-card-btn').addEventListener('click', () => setCardEditMode(node, true));
+
+    node.querySelector('.cancel-card-btn').addEventListener('click', () => {
+      node.querySelector('.card-text').value = card.text;
+      node.querySelector('.card-repeats').value = card.card_repeats;
+      replaceImageInput.value = '';
+      setCardEditMode(node, false);
+    });
+
+    node.querySelector('.save-card-btn').addEventListener('click', () => saveCardFromNode(node, card.id));
+    node.querySelector('.delete-card-btn').addEventListener('click', () => deleteCard(card.id));
+    removeImageButton.addEventListener('click', () => removeCardImage(card.id));
+
+    el.cardsList.append(node);
+  }
+}
+
+function setCardEditMode(node, isEditing) {
+  node.classList.toggle('card-editing', isEditing);
+  node.querySelector('.card-text-preview').classList.toggle('hidden', isEditing);
+  node.querySelector('.card-edit-field').classList.toggle('hidden', !isEditing);
+  node.querySelector('.card-repeats-preview').classList.toggle('hidden', isEditing);
+  node.querySelector('.card-repeats-field').classList.toggle('hidden', !isEditing);
+  node.querySelector('.card-image-row').classList.toggle('hidden', !isEditing);
+  node.querySelector('.edit-card-btn').classList.toggle('hidden', isEditing);
+  node.querySelector('.save-card-btn').classList.toggle('hidden', !isEditing);
+  node.querySelector('.cancel-card-btn').classList.toggle('hidden', !isEditing);
+}
+
+async function refreshSelectedGroup() {
+  if (!state.selectedGroup) return;
+  state.selectedGroup = await requestJson(`/api/groups/${state.selectedGroup.id}`);
+  await loadGroups();
+  renderWorkspace();
+}
+
+async function saveCardFromNode(node, cardId) {
+  const text = node.querySelector('.card-text').value.trim();
+  if (!text) {
+    showToast('Текст карточки не может быть пустым.', true);
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('text', text);
+  formData.append('card_repeats', positiveInt(node.querySelector('.card-repeats').value));
+
+  const imageInput = node.querySelector('.replace-image');
+  if (imageInput.files[0]) {
+    formData.append('image', imageInput.files[0]);
+  }
+
+  try {
+    await requestJson(`/api/cards/${cardId}`, { method: 'PATCH', body: formData });
+    await refreshSelectedGroup();
+    showToast('Карточка сохранена. Если текст изменился, MP3 создан заново.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function removeCardImage(cardId) {
+  try {
+    await requestJson(`/api/cards/${cardId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remove_image: true }),
+    });
+    await refreshSelectedGroup();
+    showToast('Изображение удалено.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function deleteCard(cardId) {
+  if (!confirm('Удалить карточку?')) return;
+
+  try {
+    await requestJson(`/api/cards/${cardId}`, { method: 'DELETE' });
+    await refreshSelectedGroup();
+    showToast('Карточка удалена.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function stopPlayback() {
+  state.playbackToken += 1;
+  if (state.currentAudio) {
+    state.currentAudio.pause();
+    state.currentAudio.currentTime = 0;
+    state.currentAudio = null;
+  }
+}
+
+function playAudioOnce(src, token) {
+  return new Promise((resolve, reject) => {
+    if (token !== state.playbackToken) return resolve();
+
+    const audio = new Audio(src);
+    state.currentAudio = audio;
+
+    audio.addEventListener('ended', () => resolve(), { once: true });
+    audio.addEventListener('error', () => reject(new Error('Не удалось воспроизвести MP3')), { once: true });
+
+    audio.play().catch(reject);
+  });
+}
+
+async function playCard(card, repeats = card.card_repeats) {
+  stopPlayback();
+  const token = state.playbackToken;
+
+  try {
+    for (let i = 0; i < repeats; i += 1) {
+      if (token !== state.playbackToken) break;
+      await playAudioOnce(`${card.audio_path}${cardCacheBuster(card)}`, token);
+    }
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function playGroup() {
+  if (!state.selectedGroup || state.selectedGroup.cards.length === 0) {
+    showToast('В группе нет карточек для воспроизведения.', true);
+    return;
+  }
+
+  stopPlayback();
+  const token = state.playbackToken;
+  const groupRepeats = positiveInt(el.selectedGroupRepeats.value, state.selectedGroup.group_repeats);
+
+  try {
+    for (let groupLoop = 0; groupLoop < groupRepeats; groupLoop += 1) {
+      for (const card of state.selectedGroup.cards) {
+        const repeats = positiveInt(card.card_repeats);
+        for (let cardLoop = 0; cardLoop < repeats; cardLoop += 1) {
+          if (token !== state.playbackToken) return;
+          await playAudioOnce(`${card.audio_path}${cardCacheBuster(card)}`, token);
+        }
+      }
+    }
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+el.groupForm.addEventListener('submit', async event => {
+  event.preventDefault();
+
+  try {
+    const group = await requestJson('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: el.groupName.value,
+        group_repeats: positiveInt(el.groupRepeats.value),
+      }),
+    });
+
+    el.groupForm.reset();
+    el.groupRepeats.value = 1;
+    await loadGroups();
+    await selectGroup(group.id);
+    showToast('Группа создана.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+});
+
+el.saveGroupBtn.addEventListener('click', async () => {
+  if (!state.selectedGroup) return;
+
+  try {
+    state.selectedGroup = await requestJson(`/api/groups/${state.selectedGroup.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: el.selectedGroupName.value,
+        group_repeats: positiveInt(el.selectedGroupRepeats.value),
+      }),
+    });
+    await loadGroups();
+    renderWorkspace();
+    showToast('Группа сохранена.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+});
+
+el.deleteGroupBtn.addEventListener('click', async () => {
+  if (!state.selectedGroup || !confirm('Удалить группу вместе со всеми карточками?')) return;
+
+  try {
+    await requestJson(`/api/groups/${state.selectedGroup.id}`, { method: 'DELETE' });
+    state.selectedGroup = null;
+    await loadGroups();
+    renderWorkspace();
+    showToast('Группа удалена.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+});
+
+el.applyBulkRepeatsBtn.addEventListener('click', async () => {
+  if (!state.selectedGroup) return;
+
+  try {
+    state.selectedGroup = await requestJson(`/api/groups/${state.selectedGroup.id}/cards/repeats`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_repeats: positiveInt(el.bulkCardRepeats.value) }),
+    });
+    await loadGroups();
+    renderWorkspace();
+    showToast('Повторы применены ко всем карточкам.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+});
+
+el.cardForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!state.selectedGroup) return;
+
+  const formData = new FormData();
+  formData.append('text', el.cardText.value);
+  formData.append('card_repeats', positiveInt(el.cardRepeats.value));
+  if (el.cardImage.files[0]) {
+    formData.append('image', el.cardImage.files[0]);
+  }
+
+  try {
+    await requestJson(`/api/groups/${state.selectedGroup.id}/cards`, {
+      method: 'POST',
+      body: formData,
+    });
+    el.cardForm.reset();
+    el.cardRepeats.value = 1;
+    await refreshSelectedGroup();
+    showToast('Карточка сохранена, MP3 создан.');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+});
+
+el.playGroupBtn.addEventListener('click', playGroup);
+el.stopPlaybackBtn.addEventListener('click', stopPlayback);
+
+loadGroups().catch(error => showToast(error.message, true));
+
+# static/style.css
+/* static/style.css */
+:root {
+  --bg: #f6f7fb;
+  --panel: #ffffff;
+  --text: #18202f;
+  --muted: #687386;
+  --line: #dfe4ee;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --danger: #dc2626;
+  --danger-dark: #b91c1c;
+  --shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+button.primary {
+  background: var(--primary);
+}
+
+button.primary:hover {
+  background: var(--primary-dark);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+button.danger:hover {
+  background: var(--danger-dark);
+}
+
+button.ghost {
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--text);
+}
+
+textarea {
+  resize: vertical;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 28px;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 28px;
+  background: #111827;
+  color: #fff;
+}
+
+.topbar p {
+  margin-top: 6px;
+  color: #d1d5db;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  min-height: calc(100vh - 92px);
+  gap: 20px;
+  padding: 20px;
+}
+
+.sidebar,
+.content {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.stack {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.grow {
+  min-height: 280px;
+}
+
+.groups-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.group-item {
+  width: 100%;
+  text-align: left;
+  background: #f9fafb;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.group-item.active {
+  background: #eff6ff;
+  border-color: var(--primary);
+}
+
+.group-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.group-item span,
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.empty-state {
+  min-height: 50vh;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border: 2px dashed var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.groupWorkspace {
+  display: grid;
+  gap: 20px;
+}
+
+.group-header {
+  display: grid;
+  gap: 16px;
+}
+
+.group-title-row,
+.cards-title-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title-input {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.card-form {
+  display: grid;
+  grid-template-columns: 1fr 160px 240px 260px;
+  align-items: end;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.cards-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  background: #fcfdff;
+}
+
+.card-image-wrap {
+  min-height: 120px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #f9fafb;
+}
+
+.card-image-wrap img {
+  width: 100%;
+  height: 100%;
+  max-height: 180px;
+  object-fit: cover;
+}
+
+.card-body {
+  display: grid;
+  gap: 12px;
+}
+
+.card-text-preview {
+  white-space: pre-wrap;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.card-edit-field {
+  margin: 0;
+}
+
+.card-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.card-controls audio {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.card-repeats-preview {
+  align-self: center;
+}
+
+.card-repeats-field {
+  flex: 0 0 160px;
+}
+
+.card-image-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  padding: 12px 16px;
+  background: #111827;
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  max-width: 420px;
+  z-index: 10;
+}
+
+@media (max-width: 1050px) {
+  .layout,
+  .controls-grid,
+  .card-form,
+  .card,
+  .card-controls,
+  .card-image-row {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar,
+  .group-title-row,
+  .cards-title-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+# templates/index.html
+<!doctype html>
+<!-- templates/index.html -->
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TTS Cards</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>TTS Cards</h1>
+      <p>Группы, карточки, изображения и автоматический MP3 при сохранении текста.</p>
+    </div>
+    <button id="stopPlaybackBtn" class="danger ghost">Остановить воспроизведение</button>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>Новая группа</h2>
+        <form id="groupForm" class="stack">
+          <input id="groupName" type="text" placeholder="Название группы" required>
+          <label>
+            Повторы всей группы
+            <input id="groupRepeats" type="number" min="1" max="100" value="1">
+          </label>
+          <button type="submit">Создать группу</button>
+        </form>
+      </section>
+
+      <section class="panel grow">
+        <h2>Группы</h2>
+        <div id="groupsList" class="groups-list"></div>
+      </section>
+    </aside>
+
+    <section class="content">
+      <div id="emptyState" class="empty-state">
+        Создайте или выберите группу слева.
+      </div>
+
+      <div id="groupWorkspace" class="hidden">
+        <section class="panel group-header">
+          <div class="group-title-row">
+            <input id="selectedGroupName" class="title-input" type="text">
+            <button id="saveGroupBtn">Сохранить группу</button>
+            <button id="deleteGroupBtn" class="danger">Удалить группу</button>
+          </div>
+
+          <div class="controls-grid">
+            <label>
+              Повторы всей группы
+              <input id="selectedGroupRepeats" type="number" min="1" max="100" value="1">
+            </label>
+            <label>
+              Повторы для всех карточек
+              <input id="bulkCardRepeats" type="number" min="1" max="100" value="1">
+            </label>
+            <button id="applyBulkRepeatsBtn">Применить ко всем карточкам</button>
+            <button id="playGroupBtn" class="primary">Воспроизвести всю группу</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Новая карточка</h2>
+          <form id="cardForm" class="card-form">
+            <label>
+              Текст карточки
+              <textarea id="cardText" rows="4" placeholder="Введите текст, из которого нужно создать MP3" required></textarea>
+            </label>
+            <label>
+              Повторы карточки
+              <input id="cardRepeats" type="number" min="1" max="100" value="1">
+            </label>
+            <label>
+              Изображение, необязательно
+              <input id="cardImage" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+            </label>
+            <button type="submit">Сохранить карточку и создать MP3</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="cards-title-row">
+            <h2>Карточки</h2>
+            <span id="cardsCounter" class="muted"></span>
+          </div>
+          <div id="cardsList" class="cards-list"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

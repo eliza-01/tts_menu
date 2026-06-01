@@ -1,0 +1,21 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="MarkdownIncorrectlyNumberedListItem" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="fastapi" />
+          <option value="uvicorn" />
+          <option value="sqlalchemy" />
+          <option value="aiomysql" />
+          <option value="python-multipart" />
+          <option value="python-dotenv" />
+          <option value="passlib" />
+          <option value="bcrypt" />
+          <option value="cryptography" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
