@@ -7,6 +7,7 @@ from uuid import uuid4
 from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from gtts import gTTS
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 from werkzeug.utils import secure_filename
 
@@ -37,6 +38,7 @@ class Group(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     group_repeats = db.Column(db.Integer, nullable=False, default=1)
+    show_card_image = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     cards = db.relationship(
@@ -67,12 +69,20 @@ class Card(db.Model):
     )
 
 
-def clamp_positive_int(value, default=1, max_value=100):
+def clamp_int(value, default=1, min_value=1, max_value=100):
     try:
         value = int(value)
     except (TypeError, ValueError):
         return default
-    return max(1, min(value, max_value))
+    return max(min_value, min(value, max_value))
+
+
+def clamp_positive_int(value, default=1, max_value=100):
+    return clamp_int(value, default=default, min_value=1, max_value=max_value)
+
+
+def clamp_card_repeats(value, default=1, max_value=100):
+    return clamp_int(value, default=default, min_value=0, max_value=max_value)
 
 
 def allowed_image(filename: str) -> bool:
@@ -146,6 +156,7 @@ def serialize_group(group: Group, include_cards=False) -> dict:
         "id": group.id,
         "name": group.name,
         "group_repeats": group.group_repeats,
+        "show_card_image": bool(group.show_card_image),
         "cards_count": len(group.cards),
     }
     if include_cards:
@@ -185,6 +196,7 @@ def create_group():
     group = Group(
         name=name,
         group_repeats=clamp_positive_int(payload.get("group_repeats"), default=1),
+        show_card_image=bool(payload.get("show_card_image", True)),
     )
     db.session.add(group)
     db.session.commit()
@@ -210,6 +222,9 @@ def update_group(group_id):
 
     if "group_repeats" in payload:
         group.group_repeats = clamp_positive_int(payload.get("group_repeats"), default=group.group_repeats)
+
+    if "show_card_image" in payload:
+        group.show_card_image = bool(payload.get("show_card_image"))
 
     db.session.commit()
     return jsonify(serialize_group(group, include_cards=True))
@@ -237,7 +252,7 @@ def create_card(group_id):
     card = Card(
         group_id=group.id,
         text=text,
-        card_repeats=clamp_positive_int(get_payload_value("card_repeats", 1), default=1),
+        card_repeats=clamp_card_repeats(get_payload_value("card_repeats", 1), default=1),
         position=next_position,
     )
     db.session.add(card)
@@ -270,7 +285,7 @@ def update_card(card_id):
                 card.text = new_text
                 text_changed = True
         if "card_repeats" in payload:
-            card.card_repeats = clamp_positive_int(payload.get("card_repeats"), default=card.card_repeats)
+            card.card_repeats = clamp_card_repeats(payload.get("card_repeats"), default=card.card_repeats)
         if payload.get("remove_image") is True:
             delete_static_file(card.image_path)
             card.image_path = None
@@ -283,7 +298,7 @@ def update_card(card_id):
                 card.text = new_text
                 text_changed = True
         if "card_repeats" in request.form:
-            card.card_repeats = clamp_positive_int(request.form.get("card_repeats"), default=card.card_repeats)
+            card.card_repeats = clamp_card_repeats(request.form.get("card_repeats"), default=card.card_repeats)
         if request.form.get("remove_image") == "true":
             delete_static_file(card.image_path)
             card.image_path = None
@@ -318,7 +333,7 @@ def delete_card(card_id):
 def bulk_update_card_repeats(group_id):
     group = db.get_or_404(Group, group_id)
     payload = request.get_json(silent=True) or {}
-    repeats = clamp_positive_int(payload.get("card_repeats"), default=1)
+    repeats = clamp_card_repeats(payload.get("card_repeats"), default=1)
 
     for card in group.cards:
         card.card_repeats = repeats
@@ -327,12 +342,25 @@ def bulk_update_card_repeats(group_id):
     return jsonify(serialize_group(group, include_cards=True))
 
 
+def ensure_schema_columns():
+    """Авто-миграция для новых колонок группы"""
+    # Добавляем show_card_image только если его нет
+    try:
+        db.session.execute(text(
+            "ALTER TABLE `groups` ADD COLUMN show_card_image BOOLEAN NOT NULL DEFAULT TRUE"
+        ))
+        db.session.commit()
+    except Exception as e:
+        # Игнорируем ошибку, если колонка уже существует
+        db.session.rollback()
+
 def init_db_with_retry():
     last_error = None
     for _ in range(40):
         try:
             with app.app_context():
                 db.create_all()
+                ensure_schema_columns()
             return
         except OperationalError as exc:
             last_error = exc

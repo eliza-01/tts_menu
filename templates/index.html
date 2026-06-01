@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, maximum-scale=1, initial-scale=1">
   <title>TTS Cards</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -56,7 +56,7 @@
             </label>
             <label>
               Повторы для всех карточек
-              <input id="bulkCardRepeats" type="number" min="1" max="100" value="1">
+              <input id="bulkCardRepeats" type="number" min="0" max="100" value="1">
             </label>
             <button id="applyBulkRepeatsBtn">Применить ко всем карточкам</button>
             <div class="playback-rate-control">
@@ -82,7 +82,7 @@
             </label>
             <label>
               Повторы карточки
-              <input id="cardRepeats" type="number" min="1" max="100" value="1">
+              <input id="cardRepeats" type="number" min="0" max="100" value="1">
             </label>
             <div class="image-picker-field">
               <label>
@@ -108,6 +108,9 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+  <div id="playbackImageOverlay" class="playback-image-overlay hidden" aria-hidden="true">
+    <img id="playbackImage" alt="Изображение текущей карточки">
+  </div>
 
   <script src="/static/app.js"></script>
 </body>

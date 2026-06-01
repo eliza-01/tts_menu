@@ -33,6 +33,8 @@ const el = {
   cardsList: document.querySelector('#cardsList'),
   cardsCounter: document.querySelector('#cardsCounter'),
   toast: document.querySelector('#toast'),
+  playbackImageOverlay: document.querySelector('#playbackImageOverlay'),
+  playbackImage: document.querySelector('#playbackImage'),
 };
 
 function showToast(message, isError = false) {
@@ -56,10 +58,22 @@ async function requestJson(url, options = {}) {
   return payload;
 }
 
-function positiveInt(value, fallback = 1) {
+function boundedInt(value, fallback = 1, min = 1, max = 100) {
   const number = Number.parseInt(value, 10);
   if (Number.isNaN(number)) return fallback;
-  return Math.max(1, Math.min(number, 100));
+  return Math.max(min, Math.min(number, max));
+}
+
+function positiveInt(value, fallback = 1) {
+  return boundedInt(value, fallback, 1, 100);
+}
+
+function cardRepeatsInt(value, fallback = 1) {
+  return boundedInt(value, fallback, 0, 100);
+}
+
+function booleanFromGroupOption(value) {
+  return value !== false;
 }
 
 function clampPlaybackRate(value, fallback = state.playbackRate || 1) {
@@ -217,8 +231,12 @@ function renderGroups() {
   }
 
   for (const group of state.groups) {
+    const item = document.createElement('div');
+    item.className = `group-item ${state.selectedGroup?.id === group.id ? 'active' : ''}`;
+
     const button = document.createElement('button');
-    button.className = `group-item ${state.selectedGroup?.id === group.id ? 'active' : ''}`;
+    button.className = 'group-select-btn';
+    button.type = 'button';
     button.innerHTML = `
       <strong></strong>
       <span></span>
@@ -226,7 +244,42 @@ function renderGroups() {
     button.querySelector('strong').textContent = group.name;
     button.querySelector('span').textContent = `Карточек: ${group.cards_count}; повторов группы: ${group.group_repeats}`;
     button.addEventListener('click', () => selectGroup(group.id));
-    el.groupsList.append(button);
+
+    const imageToggle = document.createElement('label');
+    imageToggle.className = 'group-image-toggle';
+    imageToggle.innerHTML = `
+      <input type="checkbox">
+      <span>Показывать картинку при воспроизведении</span>
+    `;
+
+    const checkbox = imageToggle.querySelector('input');
+    checkbox.checked = booleanFromGroupOption(group.show_card_image);
+    checkbox.addEventListener('click', event => event.stopPropagation());
+    checkbox.addEventListener('change', () => updateGroupImageSetting(group.id, checkbox.checked));
+
+    item.append(button, imageToggle);
+    el.groupsList.append(item);
+  }
+}
+
+async function updateGroupImageSetting(groupId, enabled) {
+  try {
+    const updatedGroup = await requestJson(`/api/groups/${groupId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ show_card_image: enabled }),
+    });
+
+    if (state.selectedGroup?.id === groupId) {
+      state.selectedGroup = updatedGroup;
+      renderWorkspace();
+    }
+
+    await loadGroups();
+    showToast(enabled ? 'Показ изображений включён.' : 'Показ изображений отключён.');
+  } catch (error) {
+    showToast(error.message, true);
+    await loadGroups();
   }
 }
 
@@ -283,10 +336,9 @@ function renderCards(cards) {
         </label>
 
         <div class="card-controls">
-          <span class="card-repeats-preview muted"></span>
-          <label class="card-repeats-field hidden">
+          <label class="card-repeats-field">
             Повторы
-            <input class="card-repeats" type="number" min="1" max="100">
+            <input class="card-repeats" type="number" min="0" max="100">
           </label>
           <audio controls preload="none"></audio>
           <button class="play-card-btn primary" type="button">Играть</button>
@@ -308,7 +360,6 @@ function renderCards(cards) {
     `;
 
     node.querySelector('.card-text-preview').textContent = card.text;
-    node.querySelector('.card-repeats-preview').textContent = `Повторы: ${card.card_repeats}`;
     node.querySelector('.card-text').value = card.text;
     node.querySelector('.card-repeats').value = card.card_repeats;
 
@@ -316,6 +367,9 @@ function renderCards(cards) {
     audio.src = `${card.audio_path}${cardCacheBuster(card)}`;
     audio.defaultPlaybackRate = state.playbackRate;
     audio.playbackRate = state.playbackRate;
+    audio.addEventListener('play', () => showPlaybackImage(card));
+    audio.addEventListener('pause', hidePlaybackImage);
+    audio.addEventListener('ended', hidePlaybackImage);
 
     const replaceImageInput = node.querySelector('.replace-image');
     const removeImageButton = node.querySelector('.remove-image-btn');
@@ -324,8 +378,11 @@ function renderCards(cards) {
       removeImageButton.textContent = 'Изображения нет';
     }
 
+    const cardRepeatsInput = node.querySelector('.card-repeats');
+    cardRepeatsInput.addEventListener('change', () => updateCardRepeats(card.id, cardRepeatsInput.value, cardRepeatsInput));
+
     node.querySelector('.play-card-btn').addEventListener('click', () => {
-      const repeats = positiveInt(node.querySelector('.card-repeats').value, card.card_repeats);
+      const repeats = cardRepeatsInt(cardRepeatsInput.value, card.card_repeats);
       playCard(card, repeats);
     });
 
@@ -351,8 +408,6 @@ function setCardEditMode(node, isEditing) {
   node.classList.toggle('card-editing', isEditing);
   node.querySelector('.card-text-preview').classList.toggle('hidden', isEditing);
   node.querySelector('.card-edit-field').classList.toggle('hidden', !isEditing);
-  node.querySelector('.card-repeats-preview').classList.toggle('hidden', isEditing);
-  node.querySelector('.card-repeats-field').classList.toggle('hidden', !isEditing);
   node.querySelector('.card-image-row').classList.toggle('hidden', !isEditing);
   node.querySelector('.edit-card-btn').classList.toggle('hidden', isEditing);
   node.querySelector('.save-card-btn').classList.toggle('hidden', !isEditing);
@@ -366,6 +421,33 @@ async function refreshSelectedGroup() {
   renderWorkspace();
 }
 
+async function updateCardRepeats(cardId, value, input = null) {
+  const repeats = cardRepeatsInt(value, 0);
+
+  try {
+    const updatedCard = await requestJson(`/api/cards/${cardId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_repeats: repeats }),
+    });
+
+    if (input) {
+      input.value = updatedCard.card_repeats;
+    }
+
+    const card = state.selectedGroup?.cards.find(item => item.id === cardId);
+    if (card) {
+      card.card_repeats = updatedCard.card_repeats;
+      card.updated_at = updatedCard.updated_at;
+    }
+
+    showToast(updatedCard.card_repeats === 0 ? 'Карточка будет пропускаться.' : 'Повторы карточки сохранены.');
+  } catch (error) {
+    showToast(error.message, true);
+    await refreshSelectedGroup();
+  }
+}
+
 async function saveCardFromNode(node, cardId) {
   const text = node.querySelector('.card-text').value.trim();
   if (!text) {
@@ -375,7 +457,7 @@ async function saveCardFromNode(node, cardId) {
 
   const formData = new FormData();
   formData.append('text', text);
-  formData.append('card_repeats', positiveInt(node.querySelector('.card-repeats').value));
+  formData.append('card_repeats', cardRepeatsInt(node.querySelector('.card-repeats').value));
 
   const imageInput = node.querySelector('.replace-image');
   if (imageInput.files[0]) {
@@ -417,8 +499,40 @@ async function deleteCard(cardId) {
   }
 }
 
+function shouldShowPlaybackImage() {
+  return booleanFromGroupOption(state.selectedGroup?.show_card_image);
+}
+
+function showPlaybackImage(card) {
+  if (!el.playbackImageOverlay || !el.playbackImage) return;
+
+  if (!shouldShowPlaybackImage() || !card?.image_path) {
+    hidePlaybackImage();
+    return;
+  }
+
+  el.playbackImage.src = `${card.image_path}${cardCacheBuster(card)}`;
+  el.playbackImage.alt = card.text ? `Изображение карточки: ${card.text}` : 'Изображение карточки';
+  el.playbackImageOverlay.classList.remove('hidden');
+  el.playbackImageOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function hidePlaybackImage() {
+  if (!el.playbackImageOverlay || !el.playbackImage) return;
+
+  el.playbackImageOverlay.classList.add('hidden');
+  el.playbackImageOverlay.setAttribute('aria-hidden', 'true');
+  el.playbackImage.removeAttribute('src');
+}
+
 function stopPlayback() {
   state.playbackToken += 1;
+  hidePlaybackImage();
+  document.querySelectorAll('audio').forEach(audio => {
+    audio.pause();
+    audio.currentTime = 0;
+  });
+
   if (state.currentAudio) {
     state.currentAudio.pause();
     state.currentAudio.currentTime = 0;
@@ -435,23 +549,56 @@ function playAudioOnce(src, token) {
     audio.playbackRate = state.playbackRate;
     state.currentAudio = audio;
 
-    audio.addEventListener('ended', () => resolve(), { once: true });
-    audio.addEventListener('error', () => reject(new Error('Не удалось воспроизвести MP3')), { once: true });
+    const cleanup = () => {
+      if (state.currentAudio === audio) {
+        state.currentAudio = null;
+      }
+    };
 
-    audio.play().catch(reject);
+    audio.addEventListener('ended', () => {
+      cleanup();
+      resolve();
+    }, { once: true });
+    audio.addEventListener('error', () => {
+      cleanup();
+      reject(new Error('Не удалось воспроизвести MP3'));
+    }, { once: true });
+
+    audio.play().catch(error => {
+      cleanup();
+      reject(error);
+    });
   });
 }
 
-async function playCard(card, repeats = card.card_repeats) {
-  stopPlayback();
-  const token = state.playbackToken;
+async function playCardRepeats(card, repeats, token) {
+  if (repeats <= 0 || token !== state.playbackToken) return;
 
+  showPlaybackImage(card);
   try {
     for (let i = 0; i < repeats; i += 1) {
       if (token !== state.playbackToken) break;
       await playAudioOnce(`${card.audio_path}${cardCacheBuster(card)}`, token);
     }
+  } finally {
+    hidePlaybackImage();
+  }
+}
+
+async function playCard(card, repeats = card.card_repeats) {
+  stopPlayback();
+  const token = state.playbackToken;
+  const safeRepeats = cardRepeatsInt(repeats, card.card_repeats);
+
+  if (safeRepeats === 0) {
+    showToast('У карточки 0 повторов — она пропущена.');
+    return;
+  }
+
+  try {
+    await playCardRepeats(card, safeRepeats, token);
   } catch (error) {
+    hidePlaybackImage();
     showToast(error.message, true);
   }
 }
@@ -469,15 +616,17 @@ async function playGroup() {
   try {
     for (let groupLoop = 0; groupLoop < groupRepeats; groupLoop += 1) {
       for (const card of state.selectedGroup.cards) {
-        const repeats = positiveInt(card.card_repeats);
-        for (let cardLoop = 0; cardLoop < repeats; cardLoop += 1) {
-          if (token !== state.playbackToken) return;
-          await playAudioOnce(`${card.audio_path}${cardCacheBuster(card)}`, token);
-        }
+        const repeats = cardRepeatsInt(card.card_repeats, 0);
+        if (repeats === 0) continue;
+        if (token !== state.playbackToken) return;
+        await playCardRepeats(card, repeats, token);
       }
     }
   } catch (error) {
+    hidePlaybackImage();
     showToast(error.message, true);
+  } finally {
+    hidePlaybackImage();
   }
 }
 
@@ -545,7 +694,7 @@ el.applyBulkRepeatsBtn.addEventListener('click', async () => {
     state.selectedGroup = await requestJson(`/api/groups/${state.selectedGroup.id}/cards/repeats`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ card_repeats: positiveInt(el.bulkCardRepeats.value) }),
+      body: JSON.stringify({ card_repeats: cardRepeatsInt(el.bulkCardRepeats.value) }),
     });
     await loadGroups();
     renderWorkspace();
@@ -561,7 +710,7 @@ el.cardForm.addEventListener('submit', async event => {
 
   const formData = new FormData();
   formData.append('text', el.cardText.value);
-  formData.append('card_repeats', positiveInt(el.cardRepeats.value));
+  formData.append('card_repeats', cardRepeatsInt(el.cardRepeats.value));
   if (el.cardImage.files[0]) {
     formData.append('image', el.cardImage.files[0]);
   }
@@ -606,3 +755,4 @@ document.addEventListener('paste', event => {
 
 setPlaybackRate(state.playbackRate, false);
 loadGroups().catch(error => showToast(error.message, true));
+
