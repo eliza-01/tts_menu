@@ -109,7 +109,13 @@
 
   <div id="toast" class="toast hidden"></div>
   <div id="playbackImageOverlay" class="playback-image-overlay hidden" aria-hidden="true">
-    <img id="playbackImage" alt="Изображение текущей карточки">
+    <div class="playback-image-frame">
+      <img id="playbackImage" alt="Изображение текущей карточки">
+    </div>
+    <div class="playback-overlay-actions">
+      <button id="overlayStopPlaybackBtn" class="danger" type="button">Стоп</button>
+      <button id="hidePlaybackImagesBtn" class="ghost" type="button">Скрыть изображения</button>
+    </div>
   </div>
 
   <script src="/static/app.js"></script>

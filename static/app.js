@@ -5,6 +5,7 @@ const state = {
   playbackToken: 0,
   currentAudio: null,
   playbackRate: 1.0,
+  playbackImagesHidden: false,
 };
 
 const el = {
@@ -35,6 +36,8 @@ const el = {
   toast: document.querySelector('#toast'),
   playbackImageOverlay: document.querySelector('#playbackImageOverlay'),
   playbackImage: document.querySelector('#playbackImage'),
+  overlayStopPlaybackBtn: document.querySelector('#overlayStopPlaybackBtn'),
+  hidePlaybackImagesBtn: document.querySelector('#hidePlaybackImagesBtn'),
 };
 
 function showToast(message, isError = false) {
@@ -367,7 +370,10 @@ function renderCards(cards) {
     audio.src = `${card.audio_path}${cardCacheBuster(card)}`;
     audio.defaultPlaybackRate = state.playbackRate;
     audio.playbackRate = state.playbackRate;
-    audio.addEventListener('play', () => showPlaybackImage(card));
+    audio.addEventListener('play', () => {
+      state.playbackImagesHidden = false;
+      showPlaybackImage(card);
+    });
     audio.addEventListener('pause', hidePlaybackImage);
     audio.addEventListener('ended', hidePlaybackImage);
 
@@ -500,7 +506,7 @@ async function deleteCard(cardId) {
 }
 
 function shouldShowPlaybackImage() {
-  return booleanFromGroupOption(state.selectedGroup?.show_card_image);
+  return booleanFromGroupOption(state.selectedGroup?.show_card_image) && !state.playbackImagesHidden;
 }
 
 function showPlaybackImage(card) {
@@ -523,6 +529,12 @@ function hidePlaybackImage() {
   el.playbackImageOverlay.classList.add('hidden');
   el.playbackImageOverlay.setAttribute('aria-hidden', 'true');
   el.playbackImage.removeAttribute('src');
+}
+
+function hideImagesForPlayback() {
+  state.playbackImagesHidden = true;
+  hidePlaybackImage();
+  showToast('Изображения скрыты до следующего запуска.');
 }
 
 function stopPlayback() {
@@ -587,6 +599,7 @@ async function playCardRepeats(card, repeats, token) {
 
 async function playCard(card, repeats = card.card_repeats) {
   stopPlayback();
+  state.playbackImagesHidden = false;
   const token = state.playbackToken;
   const safeRepeats = cardRepeatsInt(repeats, card.card_repeats);
 
@@ -610,6 +623,7 @@ async function playGroup() {
   }
 
   stopPlayback();
+  state.playbackImagesHidden = false;
   const token = state.playbackToken;
   const groupRepeats = positiveInt(el.selectedGroupRepeats.value, state.selectedGroup.group_repeats);
 
@@ -731,6 +745,15 @@ el.cardForm.addEventListener('submit', async event => {
 
 el.playGroupBtn.addEventListener('click', playGroup);
 el.stopPlaybackBtn.addEventListener('click', stopPlayback);
+
+if (el.overlayStopPlaybackBtn) {
+  el.overlayStopPlaybackBtn.addEventListener('click', stopPlayback);
+}
+
+if (el.hidePlaybackImagesBtn) {
+  el.hidePlaybackImagesBtn.addEventListener('click', hideImagesForPlayback);
+}
+
 el.pasteImageBtn.addEventListener('click', () => pasteImageIntoInput(el.cardImage));
 el.playbackRateInput.addEventListener('change', () => setPlaybackRate(el.playbackRateInput.value));
 el.decreaseRateBtn.addEventListener('click', () => setPlaybackRate(state.playbackRate - 0.1));
@@ -755,4 +778,3 @@ document.addEventListener('paste', event => {
 
 setPlaybackRate(state.playbackRate, false);
 loadGroups().catch(error => showToast(error.message, true));
-

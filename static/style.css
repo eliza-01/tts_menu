@@ -371,20 +371,51 @@ h2 {
   position: fixed;
   inset: 0;
   display: grid;
+  grid-template-rows: 1fr auto;
   place-items: center;
-  padding: 40px;
-  background: rgba(17, 24, 39, 0.08);
-  pointer-events: none;
-  z-index: 8;
+  gap: 22px;
+  padding: 40px 28px 32px;
+  background: rgba(0, 0, 0, 0.84);
+  pointer-events: auto;
+  z-index: 30;
+}
+
+.playback-image-frame {
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
 }
 
 .playback-image-overlay img {
-  max-width: min(80vw, 900px);
-  max-height: 80vh;
+  max-width: min(86vw, 980px);
+  max-height: 76vh;
   object-fit: contain;
   border-radius: 20px;
   background: #fff;
-  box-shadow: var(--shadow);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.playback-overlay-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.playback-overlay-actions button {
+  min-width: 150px;
+}
+
+.playback-overlay-actions .ghost {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.playback-overlay-actions .ghost:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 @media (max-width: 1050px) {
@@ -404,4 +435,3 @@ h2 {
     flex-direction: column;
   }
 }
-
