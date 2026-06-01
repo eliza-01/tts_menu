@@ -222,9 +222,22 @@ h2 {
 
 .controls-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: repeat(5, minmax(160px, 1fr));
   gap: 12px;
   align-items: end;
+}
+
+.playback-rate-control,
+.image-picker-field {
+  display: grid;
+  gap: 8px;
+  align-content: end;
+}
+
+.rate-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
 }
 
 .card-form {
@@ -308,7 +321,7 @@ h2 {
 
 .card-image-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 10px;
   align-items: end;
 }

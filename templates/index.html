@@ -59,6 +59,16 @@
               <input id="bulkCardRepeats" type="number" min="1" max="100" value="1">
             </label>
             <button id="applyBulkRepeatsBtn">Применить ко всем карточкам</button>
+            <div class="playback-rate-control">
+              <label>
+                Скорость MP3
+                <input id="playbackRateInput" type="number" min="0.5" max="2" step="0.1" value="1.0">
+              </label>
+              <div class="rate-buttons">
+                <button id="decreaseRateBtn" type="button">−0.1</button>
+                <button id="increaseRateBtn" type="button">+0.1</button>
+              </div>
+            </div>
             <button id="playGroupBtn" class="primary">Воспроизвести всю группу</button>
           </div>
         </section>
@@ -74,10 +84,14 @@
               Повторы карточки
               <input id="cardRepeats" type="number" min="1" max="100" value="1">
             </label>
-            <label>
-              Изображение, необязательно
-              <input id="cardImage" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
-            </label>
+            <div class="image-picker-field">
+              <label>
+                Изображение, необязательно
+                <input id="cardImage" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+              </label>
+              <button id="pasteImageBtn" type="button">Вставить из буфера</button>
+              <span class="muted">Также можно нажать Ctrl+V.</span>
+            </div>
             <button type="submit">Сохранить карточку и создать MP3</button>
           </form>
         </section>

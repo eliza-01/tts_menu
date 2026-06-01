@@ -4,6 +4,7 @@ const state = {
   selectedGroup: null,
   playbackToken: 0,
   currentAudio: null,
+  playbackRate: 1.0,
 };
 
 const el = {
@@ -25,6 +26,10 @@ const el = {
   cardText: document.querySelector('#cardText'),
   cardRepeats: document.querySelector('#cardRepeats'),
   cardImage: document.querySelector('#cardImage'),
+  pasteImageBtn: document.querySelector('#pasteImageBtn'),
+  playbackRateInput: document.querySelector('#playbackRateInput'),
+  decreaseRateBtn: document.querySelector('#decreaseRateBtn'),
+  increaseRateBtn: document.querySelector('#increaseRateBtn'),
   cardsList: document.querySelector('#cardsList'),
   cardsCounter: document.querySelector('#cardsCounter'),
   toast: document.querySelector('#toast'),
@@ -56,6 +61,130 @@ function positiveInt(value, fallback = 1) {
   if (Number.isNaN(number)) return fallback;
   return Math.max(1, Math.min(number, 100));
 }
+
+function clampPlaybackRate(value, fallback = state.playbackRate || 1) {
+  const number = Number.parseFloat(value);
+  if (Number.isNaN(number)) return fallback;
+  return Math.max(0.5, Math.min(number, 2));
+}
+
+function formatPlaybackRate(value) {
+  return (Math.round(value * 10) / 10).toFixed(1);
+}
+
+function applyPlaybackRate() {
+  document.querySelectorAll('audio').forEach(audio => {
+    audio.defaultPlaybackRate = state.playbackRate;
+    audio.playbackRate = state.playbackRate;
+  });
+
+  if (state.currentAudio) {
+    state.currentAudio.defaultPlaybackRate = state.playbackRate;
+    state.currentAudio.playbackRate = state.playbackRate;
+  }
+}
+
+function setPlaybackRate(value, notify = true) {
+  state.playbackRate = clampPlaybackRate(value);
+
+  if (el.playbackRateInput) {
+    el.playbackRateInput.value = formatPlaybackRate(state.playbackRate);
+  }
+
+  applyPlaybackRate();
+
+  if (notify) {
+    showToast(`Скорость MP3: x${formatPlaybackRate(state.playbackRate)}`);
+  }
+}
+
+function clipboardImageFilename(mimeType) {
+  const extensions = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+  };
+  const extension = extensions[mimeType] || 'png';
+  return `clipboard_${Date.now()}.${extension}`;
+}
+
+function normalizeClipboardImage(fileOrBlob) {
+  if (!fileOrBlob) return null;
+
+  if (fileOrBlob instanceof File && fileOrBlob.name) {
+    return fileOrBlob;
+  }
+
+  const type = fileOrBlob.type || 'image/png';
+  return new File([fileOrBlob], clipboardImageFilename(type), { type });
+}
+
+function setImageInputFile(input, file) {
+  if (!input || !file) return false;
+
+  const dataTransfer = new DataTransfer();
+  dataTransfer.items.add(file);
+  input.files = dataTransfer.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
+function imageFromPasteEvent(event) {
+  const items = Array.from(event.clipboardData?.items || []);
+  const imageItem = items.find(item => item.kind === 'file' && item.type.startsWith('image/'));
+  return imageItem ? normalizeClipboardImage(imageItem.getAsFile()) : null;
+}
+
+async function imageFromClipboardApi() {
+  if (!navigator.clipboard?.read) {
+    throw new Error('Кнопка вставки недоступна в этом браузере. Используйте Ctrl+V.');
+  }
+
+  const clipboardItems = await navigator.clipboard.read();
+
+  for (const item of clipboardItems) {
+    const imageType = item.types.find(type => type.startsWith('image/'));
+    if (imageType) {
+      const blob = await item.getType(imageType);
+      return normalizeClipboardImage(blob);
+    }
+  }
+
+  throw new Error('В буфере обмена нет изображения.');
+}
+
+function imagePasteTargetFromEvent(event) {
+  const cardNode = event.target?.closest?.('.card');
+  if (cardNode?.classList.contains('card-editing')) {
+    return cardNode.querySelector('.replace-image');
+  }
+
+  const editingImageInput = document.querySelector('.card.card-editing .replace-image');
+  return editingImageInput || el.cardImage;
+}
+
+function pasteMessageForInput(input) {
+  return input?.classList.contains('replace-image')
+    ? 'Изображение из буфера выбрано для замены в карточке.'
+    : 'Изображение из буфера добавлено к новой карточке.';
+}
+
+async function pasteImageIntoInput(input) {
+  try {
+    if (!state.selectedGroup) {
+      showToast('Сначала выберите группу.', true);
+      return;
+    }
+
+    const file = await imageFromClipboardApi();
+    setImageInputFile(input, file);
+    showToast(pasteMessageForInput(input));
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 
 async function loadGroups() {
   state.groups = await requestJson('/api/groups');
@@ -172,6 +301,7 @@ function renderCards(cards) {
             Заменить изображение
             <input class="replace-image" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
           </label>
+          <button class="paste-replace-image-btn" type="button">Вставить из буфера</button>
           <button class="remove-image-btn" type="button">Убрать изображение</button>
         </div>
       </div>
@@ -184,6 +314,8 @@ function renderCards(cards) {
 
     const audio = node.querySelector('audio');
     audio.src = `${card.audio_path}${cardCacheBuster(card)}`;
+    audio.defaultPlaybackRate = state.playbackRate;
+    audio.playbackRate = state.playbackRate;
 
     const replaceImageInput = node.querySelector('.replace-image');
     const removeImageButton = node.querySelector('.remove-image-btn');
@@ -208,6 +340,7 @@ function renderCards(cards) {
 
     node.querySelector('.save-card-btn').addEventListener('click', () => saveCardFromNode(node, card.id));
     node.querySelector('.delete-card-btn').addEventListener('click', () => deleteCard(card.id));
+    node.querySelector('.paste-replace-image-btn').addEventListener('click', () => pasteImageIntoInput(replaceImageInput));
     removeImageButton.addEventListener('click', () => removeCardImage(card.id));
 
     el.cardsList.append(node);
@@ -298,6 +431,8 @@ function playAudioOnce(src, token) {
     if (token !== state.playbackToken) return resolve();
 
     const audio = new Audio(src);
+    audio.defaultPlaybackRate = state.playbackRate;
+    audio.playbackRate = state.playbackRate;
     state.currentAudio = audio;
 
     audio.addEventListener('ended', () => resolve(), { once: true });
@@ -447,5 +582,27 @@ el.cardForm.addEventListener('submit', async event => {
 
 el.playGroupBtn.addEventListener('click', playGroup);
 el.stopPlaybackBtn.addEventListener('click', stopPlayback);
+el.pasteImageBtn.addEventListener('click', () => pasteImageIntoInput(el.cardImage));
+el.playbackRateInput.addEventListener('change', () => setPlaybackRate(el.playbackRateInput.value));
+el.decreaseRateBtn.addEventListener('click', () => setPlaybackRate(state.playbackRate - 0.1));
+el.increaseRateBtn.addEventListener('click', () => setPlaybackRate(state.playbackRate + 0.1));
 
+document.addEventListener('paste', event => {
+  const file = imageFromPasteEvent(event);
+  if (!file) return;
+
+  if (!state.selectedGroup) {
+    showToast('Сначала выберите группу.', true);
+    return;
+  }
+
+  const input = imagePasteTargetFromEvent(event);
+  if (!input) return;
+
+  event.preventDefault();
+  setImageInputFile(input, file);
+  showToast(pasteMessageForInput(input));
+});
+
+setPlaybackRate(state.playbackRate, false);
 loadGroups().catch(error => showToast(error.message, true));
