@@ -8,6 +8,7 @@ const state = {
   playbackToken: 0,
   currentAudio: null,
   playbackRate: 1.0,
+  playbackImagesHidden: false,
 };
 
 const el = {
@@ -38,6 +39,8 @@ const el = {
   toast: document.querySelector('#toast'),
   playbackImageOverlay: document.querySelector('#playbackImageOverlay'),
   playbackImage: document.querySelector('#playbackImage'),
+  overlayStopPlaybackBtn: document.querySelector('#overlayStopPlaybackBtn'),
+  hidePlaybackImagesBtn: document.querySelector('#hidePlaybackImagesBtn'),
 };
 
 function showToast(message, isError = false) {
@@ -370,7 +373,10 @@ function renderCards(cards) {
     audio.src = `${card.audio_path}${cardCacheBuster(card)}`;
     audio.defaultPlaybackRate = state.playbackRate;
     audio.playbackRate = state.playbackRate;
-    audio.addEventListener('play', () => showPlaybackImage(card));
+    audio.addEventListener('play', () => {
+      state.playbackImagesHidden = false;
+      showPlaybackImage(card);
+    });
     audio.addEventListener('pause', hidePlaybackImage);
     audio.addEventListener('ended', hidePlaybackImage);
 
@@ -503,7 +509,7 @@ async function deleteCard(cardId) {
 }
 
 function shouldShowPlaybackImage() {
-  return booleanFromGroupOption(state.selectedGroup?.show_card_image);
+  return booleanFromGroupOption(state.selectedGroup?.show_card_image) && !state.playbackImagesHidden;
 }
 
 function showPlaybackImage(card) {
@@ -526,6 +532,12 @@ function hidePlaybackImage() {
   el.playbackImageOverlay.classList.add('hidden');
   el.playbackImageOverlay.setAttribute('aria-hidden', 'true');
   el.playbackImage.removeAttribute('src');
+}
+
+function hideImagesForPlayback() {
+  state.playbackImagesHidden = true;
+  hidePlaybackImage();
+  showToast('Изображения скрыты до следующего запуска.');
 }
 
 function stopPlayback() {
@@ -590,6 +602,7 @@ async function playCardRepeats(card, repeats, token) {
 
 async function playCard(card, repeats = card.card_repeats) {
   stopPlayback();
+  state.playbackImagesHidden = false;
   const token = state.playbackToken;
   const safeRepeats = cardRepeatsInt(repeats, card.card_repeats);
 
@@ -613,6 +626,7 @@ async function playGroup() {
   }
 
   stopPlayback();
+  state.playbackImagesHidden = false;
   const token = state.playbackToken;
   const groupRepeats = positiveInt(el.selectedGroupRepeats.value, state.selectedGroup.group_repeats);
 
@@ -734,6 +748,15 @@ el.cardForm.addEventListener('submit', async event => {
 
 el.playGroupBtn.addEventListener('click', playGroup);
 el.stopPlaybackBtn.addEventListener('click', stopPlayback);
+
+if (el.overlayStopPlaybackBtn) {
+  el.overlayStopPlaybackBtn.addEventListener('click', stopPlayback);
+}
+
+if (el.hidePlaybackImagesBtn) {
+  el.hidePlaybackImagesBtn.addEventListener('click', hideImagesForPlayback);
+}
+
 el.pasteImageBtn.addEventListener('click', () => pasteImageIntoInput(el.cardImage));
 el.playbackRateInput.addEventListener('change', () => setPlaybackRate(el.playbackRateInput.value));
 el.decreaseRateBtn.addEventListener('click', () => setPlaybackRate(state.playbackRate - 0.1));
@@ -1133,20 +1156,51 @@ h2 {
   position: fixed;
   inset: 0;
   display: grid;
+  grid-template-rows: 1fr auto;
   place-items: center;
-  padding: 40px;
-  background: rgba(17, 24, 39, 0.08);
-  pointer-events: none;
-  z-index: 8;
+  gap: 22px;
+  padding: 40px 28px 32px;
+  background: rgba(0, 0, 0, 0.84);
+  pointer-events: auto;
+  z-index: 30;
+}
+
+.playback-image-frame {
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
 }
 
 .playback-image-overlay img {
-  max-width: min(80vw, 900px);
-  max-height: 80vh;
+  max-width: min(86vw, 980px);
+  max-height: 76vh;
   object-fit: contain;
   border-radius: 20px;
   background: #fff;
-  box-shadow: var(--shadow);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.playback-overlay-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.playback-overlay-actions button {
+  min-width: 150px;
+}
+
+.playback-overlay-actions .ghost {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.playback-overlay-actions .ghost:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 @media (max-width: 1050px) {
@@ -1279,7 +1333,13 @@ h2 {
 
   <div id="toast" class="toast hidden"></div>
   <div id="playbackImageOverlay" class="playback-image-overlay hidden" aria-hidden="true">
-    <img id="playbackImage" alt="Изображение текущей карточки">
+    <div class="playback-image-frame">
+      <img id="playbackImage" alt="Изображение текущей карточки">
+    </div>
+    <div class="playback-overlay-actions">
+      <button id="overlayStopPlaybackBtn" class="danger" type="button">Стоп</button>
+      <button id="hidePlaybackImagesBtn" class="ghost" type="button">Скрыть изображения</button>
+    </div>
   </div>
 
   <script src="/static/app.js"></script>

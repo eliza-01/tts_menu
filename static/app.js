@@ -3,9 +3,10 @@ const state = {
   groups: [],
   selectedGroup: null,
   playbackToken: 0,
-  currentAudio: null,
+  currentAudio: new Audio(),
   playbackRate: 1.0,
   playbackImagesHidden: false,
+  pauseBetweenCards: 0,
 };
 
 const el = {
@@ -31,6 +32,7 @@ const el = {
   playbackRateInput: document.querySelector('#playbackRateInput'),
   decreaseRateBtn: document.querySelector('#decreaseRateBtn'),
   increaseRateBtn: document.querySelector('#increaseRateBtn'),
+  pauseBetweenCardsInput: document.querySelector('#pauseBetweenCardsInput'),
   cardsList: document.querySelector('#cardsList'),
   cardsCounter: document.querySelector('#cardsCounter'),
   toast: document.querySelector('#toast'),
@@ -87,6 +89,20 @@ function clampPlaybackRate(value, fallback = state.playbackRate || 1) {
 
 function formatPlaybackRate(value) {
   return (Math.round(value * 10) / 10).toFixed(1);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function clampPauseBetweenCards(value, fallback = 0) {
+  const number = Number.parseFloat(value);
+
+  if (Number.isNaN(number)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(number, 3600));
 }
 
 function applyPlaybackRate() {
@@ -539,7 +555,9 @@ function hideImagesForPlayback() {
 
 function stopPlayback() {
   state.playbackToken += 1;
+
   hidePlaybackImage();
+
   document.querySelectorAll('audio').forEach(audio => {
     audio.pause();
     audio.currentTime = 0;
@@ -548,33 +566,44 @@ function stopPlayback() {
   if (state.currentAudio) {
     state.currentAudio.pause();
     state.currentAudio.currentTime = 0;
-    state.currentAudio = null;
+    state.currentAudio.removeAttribute('src');
+    state.currentAudio.load();
   }
 }
 
 function playAudioOnce(src, token) {
   return new Promise((resolve, reject) => {
-    if (token !== state.playbackToken) return resolve();
+    if (token !== state.playbackToken) {
+      resolve();
+      return;
+    }
 
-    const audio = new Audio(src);
+    const audio = state.currentAudio;
+
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = src;
+
     audio.defaultPlaybackRate = state.playbackRate;
     audio.playbackRate = state.playbackRate;
-    state.currentAudio = audio;
 
-    const cleanup = () => {
-      if (state.currentAudio === audio) {
-        state.currentAudio = null;
-      }
-    };
-
-    audio.addEventListener('ended', () => {
+    const onEnded = () => {
       cleanup();
       resolve();
-    }, { once: true });
-    audio.addEventListener('error', () => {
+    };
+
+    const onError = () => {
       cleanup();
       reject(new Error('Не удалось воспроизвести MP3'));
-    }, { once: true });
+    };
+
+    const cleanup = () => {
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+    };
+
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
 
     audio.play().catch(error => {
       cleanup();
@@ -587,10 +616,25 @@ async function playCardRepeats(card, repeats, token) {
   if (repeats <= 0 || token !== state.playbackToken) return;
 
   showPlaybackImage(card);
+
   try {
     for (let i = 0; i < repeats; i += 1) {
-      if (token !== state.playbackToken) break;
-      await playAudioOnce(`${card.audio_path}${cardCacheBuster(card)}`, token);
+      if (token !== state.playbackToken) {
+        break;
+      }
+
+      await playAudioOnce(
+        `${card.audio_path}${cardCacheBuster(card)}`,
+        token
+      );
+
+      if (token !== state.playbackToken) {
+        break;
+      }
+
+      if (state.pauseBetweenCards > 0 && i < repeats - 1) {
+        await sleep(state.pauseBetweenCards * 1000);
+      }
     }
   } finally {
     hidePlaybackImage();
@@ -627,6 +671,11 @@ async function playGroup() {
   const token = state.playbackToken;
   const groupRepeats = positiveInt(el.selectedGroupRepeats.value, state.selectedGroup.group_repeats);
 
+  state.pauseBetweenCards = clampPauseBetweenCards(
+    el.pauseBetweenCardsInput?.value,
+    state.pauseBetweenCards
+  );
+
   try {
     for (let groupLoop = 0; groupLoop < groupRepeats; groupLoop += 1) {
       for (const card of state.selectedGroup.cards) {
@@ -634,6 +683,14 @@ async function playGroup() {
         if (repeats === 0) continue;
         if (token !== state.playbackToken) return;
         await playCardRepeats(card, repeats, token);
+
+        if (token !== state.playbackToken) {
+          return;
+        }
+
+        if (state.pauseBetweenCards > 0) {
+          await sleep(state.pauseBetweenCards * 1000);
+        }
       }
     }
   } catch (error) {
